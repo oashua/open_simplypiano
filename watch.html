@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="x-ua-compatible" content="ie=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<!-- <link rel="icon" href="favicon.ico" type="image/x-icon"> -->
+	<link rel="stylesheet" href="examples-styles.css">
+
+	<title>abcjs: Basic Demo</title>
+	<script src="abcjs-basic.js" type="text/javascript"></script>
+	<script src="aubio.js"></script>
+	<style>
+		.abcjs-note.highlight {
+			fill: red !important;
+			/* 高亮颜色 */
+			stroke: red !important;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="container">
+		<div id="paper"></div>
+		<button id="start">开始练习</button>
+		<div id='frequency'>频率：</div>
+	</div>
+	<script>
+		const abcNotationprefix = "T: Cooley's\n" +
+			"M: 4/4\n" +
+			"L: 1/8\n" +
+			"R: reel\n";
+		const K = 'C';
+		const notesstr = "|CDEFGAB^C|";
+		const regex1 = /\{[\^_=]?[A-Ga-g][,']*\}/g;
+		const result1 = notesstr.replace(regex1, ''); //去掉大括号内的内容
+		const regex2 = /([\^_=]?[A-Za-z][,']*(?!}))|\|/g;
+		const result2 = result1.match(regex2); //匹配音符和小节号
+
+		function convertNotesToPitch(notes, K) {
+			let result = [];
+			let currentKeySignature = {}; // 存储当前小节的升降记号，按八度分组
+			let keySignature = {}; // 调式决定的升降记号
+
+			// 解析调式
+			const parseKey = (key) => {
+				const keyMap = {
+					'C': [], 'C#': ['F', 'C', 'G', 'D', 'A', 'E', 'B'], 'Cb': ['B', 'E', 'A', 'D', 'G', 'C', 'F'],
+					'G': ['F'], 'G#': ['F', 'C', 'G', 'D', 'A', 'E', 'B'], 'Gb': ['B', 'E', 'A', 'D', 'G', 'C'],
+					'D': ['F', 'C'], 'D#': ['F', 'C', 'G', 'D', 'A', 'E', 'B'], 'Db': ['B', 'E', 'A', 'D', 'G'],
+					'A': ['F', 'C', 'G'], 'A#': ['F', 'C', 'G', 'D', 'A', 'E', 'B'], 'Ab': ['B', 'E', 'A', 'D'],
+					'E': ['F', 'C', 'G', 'D'], 'E#': ['F', 'C', 'G', 'D', 'A', 'E', 'B'], 'Eb': ['B', 'E', 'A'],
+					'B': ['F', 'C', 'G', 'D', 'A'], 'B#': ['F', 'C', 'G', 'D', 'A', 'E', 'B'], 'Bb': ['B', 'E'],
+					'F': ['B'], 'F#': ['F', 'C', 'G', 'D', 'A', 'E', 'B'], 'Fb': ['B', 'E', 'A', 'D', 'G', 'C']
+				};
+
+				// 处理小调
+				let isMinor = key.includes('min');
+				let baseKey = isMinor ? key.replace('min', '') : key;
+
+				// 获取大调升降记号
+				let sharpsOrFlats = keyMap[baseKey] || [];
+
+				// 如果是小调，转换为关系大调
+				if (isMinor) {
+					const minorToMajor = {
+						'A': 'C', 'A#': 'C#', 'Ab': 'Cb',
+						'E': 'G', 'E#': 'G#', 'Eb': 'Gb',
+						'B': 'D', 'B#': 'D#', 'Bb': 'Db',
+						'F#': 'A', 'F': 'Ab', 'Fb': 'Abb',
+						'C#': 'E', 'C': 'Eb', 'Cb': 'Ebb',
+						'G#': 'B', 'G': 'Bb', 'Gb': 'Dbb',
+						'D#': 'F#', 'D': 'F', 'Db': 'Fb'
+					};
+					sharpsOrFlats = keyMap[minorToMajor[baseKey] || 'C'] || [];
+				}
+
+				// 构建调式升降记号
+				const signature = {};
+				sharpsOrFlats.forEach(note => {
+					if (baseKey.includes('#')) {
+						signature[note] = '#';
+					} else if (baseKey.includes('b')) {
+						signature[note] = 'b';
+					} else if (key.includes('#')) {
+						signature[note] = '#';
+					} else if (key.includes('b')) {
+						signature[note] = 'b';
+					}
+				});
+
+				return signature;
+			};
+
+			// 初始化调式升降记号
+			keySignature = parseKey(K);
+
+			for (let i = 0; i < notes.length; i++) {
+				const note = notes[i];
+
+				// 跳过小节线
+				if (note === '|') {
+					// 小节结束，重置临时升降记号
+					currentKeySignature = {};
+					continue;
+				}
+
+				// 处理普通音符
+				if (note.match(/^[\^_=]?[a-zA-Z][',]*$/)) {
+					let processedNote = note;
+					let accidental = '';
+
+					// 提取升降记号
+					if (note.startsWith('^') || note.startsWith('_') || note.startsWith('=')) {
+						accidental = note[0];
+						processedNote = note.substring(1);
+					}
+
+					// 计算基础音高和八度
+					let baseNote = processedNote[0].toUpperCase();
+					let octave = (processedNote[0] === processedNote[0].toLowerCase()) ? 5 : 4;
+
+					// 处理八度变化符号
+					const apostrophes = (processedNote.match(/'/g) || []).length;
+					const commas = (processedNote.match(/,/g) || []).length;
+					octave += apostrophes - commas;
+
+					// 构建八度键
+					const octaveKey = `${baseNote}${octave}`;
+
+					// 处理临时升降记号
+					if (accidental === '^') {
+						currentKeySignature[octaveKey] = '#';
+					} else if (accidental === '_') {
+						currentKeySignature[octaveKey] = 'b';
+					} else if (accidental === '=') {
+						currentKeySignature[octaveKey] = '';
+					}
+
+					// 确定最终升降记号（临时记号优先于调式记号）
+					let appliedAccidental = currentKeySignature[octaveKey];
+					if (appliedAccidental === undefined) {
+						appliedAccidental = keySignature[baseNote] || '';
+					}
+
+					// 构建结果
+					const pitch = `${baseNote}${appliedAccidental}${octave}`;
+					result.push(pitch);
+				}
+			}
+
+			return result;
+		}
+
+		const pitchArray = convertNotesToPitch(result2, K); //转换音符为音高
+
+
+		// 渲染乐谱，并启用类名标记
+		const visualObj = ABCJS.renderAbc("paper", abcNotationprefix + 'K:' + K + '\n' + notesstr, {
+			add_classes: true,  // 允许通过类名操作音符
+			//   responsive: "resize"
+		})[0];
+
+		// 获取所有音符元素
+		const notes = document.querySelectorAll(".abcjs-note");
+		let currentNoteIndex = 0;
+
+		// 高亮指定索引的音符
+		function highlightNote(index) {
+			// 清除之前的高亮
+			notes.forEach(note => note.classList.remove("highlight"));
+
+			// 设置新高亮
+			if (index >= 0 && index < notes.length) {
+				notes[index].classList.add("highlight");
+				currentNoteIndex = index;
+			}
+		}
+
+		// 初始化：高亮第一个音符
+		highlightNote(0);
+
+		let audioContext;
+		let microphone;
+		let pitchDetector;
+		let isRunning = false;
+		// 初始化音频上下文
+
+		// 获取麦克风访问权限
+		document.getElementById('start').addEventListener('click', async () => {
+			if (isRunning) return;
+			isRunning = true;
+			try {
+				audioContext = new (AudioContext || webkitAudioContext)();
+				const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+				microphone = audioContext.createMediaStreamSource(stream);
+
+
+				scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+				// 连接节点
+				microphone.connect(scriptProcessor);
+				// microphone.connect(audioContext.destination);
+				scriptProcessor.connect(audioContext.destination);
+
+
+				aubio().then(({ Pitch }) => {
+					const pitchDetector = new Pitch(
+						"yinfft",
+						4096 * 4,
+						4096,
+						audioContext.sampleRate
+					);
+
+
+					// 处理音频数据
+					scriptProcessor.addEventListener("audioprocess", function (event) {
+						const data = event.inputBuffer.getChannelData(0);
+						const frequency = pitchDetector.do(data);
+
+						if (frequency>20&&frequency<5000) {
+							const basenotes = ['C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B'];
+							const noteIndex = 12 * Math.log2(frequency / 440) + 69; // A4 is 440Hz and has index 69 in MIDI scale
+							const noteName = basenotes[Math.round(noteIndex) % 12];
+							const octave = Math.floor(noteIndex / 12) - 1;
+							document.getElementById('frequency').textContent = `频率: ${frequency.toFixed(2)} Hz
+                            音名: ${noteName}${octave}`;
+
+							if (noteName.split('/').length > 1) {
+								mictone1 = noteName.split('/')[0] + octave;
+								mictone2 = noteName.split('/')[1] + octave;
+								if (mictone1 === pitchArray[currentNoteIndex] || mictone2 === pitchArray[currentNoteIndex]) {
+									highlightNote((currentNoteIndex + 1) % notes.length);
+								}
+							}
+							else {
+								mictone1 = noteName + octave;
+								if (mictone1 === pitchArray[currentNoteIndex]) {
+									highlightNote((currentNoteIndex + 1) % notes.length);
+								}
+							}
+						}
+					});
+				});
+			}
+			catch (error) {
+				console.error("获取麦克风权限失败:", error);
+				isRunning = false
+			}
+		});
+
+		// 键盘方向键控制
+		document.addEventListener("keydown", (e) => {
+			if (e.key === "ArrowLeft") {  // 左键：上一个音符
+				highlightNote((currentNoteIndex - 1 + notes.length) % notes.length);
+			} else if (e.key === "ArrowRight") {  // 右键：下一个音符
+				highlightNote((currentNoteIndex + 1) % notes.length);
+			}
+		});
+	</script>
+</body>
+
+</html>
