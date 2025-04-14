@@ -38,7 +38,7 @@ R: Andante
 K: G
 |B2D'3/2E'1/2G'3/2A'1/2E'1/2G'1/2D'|D''3/2G''1/2E''1/2D''1/2B'1/2D''1/2A'4|
 A'A'1/2B'1/2F'E'D'3/2E'1/2G'A'|BG'E'1/2D'1/2E'1/2G'1/2D'4|`;
-		const K = abcNotation.match(/K:[\s]*[A-G][b|#|min]?/g)[0].replace(/K:[\s]*/g, '')
+		const K = abcNotation.match(/K:[\s]*[A-G][b|#]?[min]?/g)[0].replace(/K:[\s]*/g, '')
 		const notesstr = abcNotation.match(/^(?![A-Z]:).+/gm).join('\n'); //提取音符部分
 		const regex1 = /\{[\^_=]?[A-Ga-g][,']*\}/g;
 		const result1 = notesstr.replace(regex1, ''); //去掉大括号内的内容
@@ -61,13 +61,30 @@ A'A'1/2B'1/2F'E'D'3/2E'1/2G'A'|BG'E'1/2D'1/2E'1/2G'1/2D'4|`;
 					'B': ['F', 'C', 'G', 'D', 'A'], 'B#': ['F', 'C', 'G', 'D', 'A', 'E', 'B'], 'Bb': ['B', 'E'],
 					'F': ['B'], 'F#': ['F', 'C', 'G', 'D', 'A', 'E', 'B'], 'Fb': ['B', 'E', 'A', 'D', 'G', 'C']
 				};
+				const keyMap2 = {
+					'C': [], 
+					'G': ['F'], 
+					'D': ['F', 'C'], 
+					'A': ['F', 'C', 'G'], 
+					'E': ['F', 'C', 'G', 'D'], 
+					'B': ['F', 'C', 'G', 'D', 'A'], 
+					'F#': ['F', 'C', 'G', 'D', 'A', 'E'],
+					'C#': ['F', 'C', 'G', 'D', 'A', 'E', 'B'], 
 
+					'F': ['B'], 
+					'Bb': ['B', 'E'],
+					'Eb': ['B', 'E', 'A'],
+					'Ab': ['B', 'E', 'A', 'D'],
+					'Db': ['B', 'E', 'A', 'D', 'G'],
+					'Gb': ['B', 'E', 'A', 'D', 'G', 'C'],
+					'Cb': ['B', 'E', 'A', 'D', 'G', 'C', 'F'],
+				};
 				// 处理小调
 				let isMinor = key.includes('min');
 				let baseKey = isMinor ? key.replace('min', '') : key;
 
 				// 获取大调升降记号
-				let sharpsOrFlats = keyMap[baseKey] || [];
+				let sharpsOrFlats = keyMap2[baseKey] || [];
 
 				// 如果是小调，转换为关系大调
 				if (isMinor) {
@@ -80,21 +97,16 @@ A'A'1/2B'1/2F'E'D'3/2E'1/2G'A'|BG'E'1/2D'1/2E'1/2G'1/2D'4|`;
 						'G#': 'B', 'G': 'Bb', 'Gb': 'Dbb',
 						'D#': 'F#', 'D': 'F', 'Db': 'Fb'
 					};
-					sharpsOrFlats = keyMap[minorToMajor[baseKey] || 'C'] || [];
+					sharpsOrFlats = keyMap2[minorToMajor[baseKey] || 'C'] || [];
 				}
 
 				// 构建调式升降记号
 				const signature = {};
 				sharpsOrFlats.forEach(note => {
-					if (baseKey.includes('#')) {
+					if (['G','D','A','E','B','F#','C#'].includes(baseKey)&&keyMap2[baseKey].includes(note)) {
 						signature[note] = '#';
-					} else if (baseKey.includes('b')) {
-						signature[note] = 'b';
-					} else if (key.includes('#')) {
-						signature[note] = '#';
-					} else if (key.includes('b')) {
-						signature[note] = 'b';
-					}
+					} else if (['F','Bb','Eb','Ab','Db','Gb','Cb'].includes(baseKey)&&keyMap2[baseKey].includes(note)) {
+						signature[note] = 'b';}
 				});
 
 				return signature;
@@ -260,7 +272,7 @@ A'A'1/2B'1/2F'E'D'3/2E'1/2G'A'|BG'E'1/2D'1/2E'1/2G'1/2D'4|`;
 						const frequency = pitchDetector.do(data);
 
 						if (frequency > 20 && frequency < 5000) {
-							const basenotes = ['C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B'];
+							const basenotes = ['C/B#', 'C#/Db', 'D', 'D#/Eb', 'E/Fb', 'F/E#', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B/Cb'];
 							const noteIndex = 12 * Math.log2(frequency / 440) + 69; // A4 is 440Hz and has index 69 in MIDI scale
 							const noteName = basenotes[Math.round(noteIndex) % 12];
 							const octave = Math.floor(noteIndex / 12) - 1;
